@@ -9,3 +9,8 @@ Este repositório contém códigos e exercícios que desenvolvi durante meus est
 
 ## Objetivo
 Aprender Python na prática, organizando todos os projetos e exercícios aqui.
+
+## Estrutura do Repositório
+- `/faculdade` → Exercícios e projetos da faculdade
+- `/estudos` → Estudos pessoais
+- `/automacoes` → Scripts úteis do dia a dia
