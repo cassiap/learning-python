@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 """
-shrink_to_size.py — Compress an image to a target file size (in KB).
-Requires: Pillow
+Comprimir imagens, exige Pillow (pip install Pillow).
 
-Usage:
-  python shrink_to_size.py input.jpg --out output.jpg --target 70
-  python shrink_to_size.py input.png --out output.webp --target 70 --format WEBP
-  python shrink_to_size.py input.jpg --out output.jpg --target 70 --max-width 1280
-
-Notes:
-- Default output format is JPEG. Use --format WEBP for better compression (often smaller for photos).
-- If input has transparency and output is JPEG, the alpha will be flattened onto a white background.
 """
 
 import argparse
@@ -21,13 +12,11 @@ from pathlib import Path
 
 from PIL import Image
 
-# For reproducibility across Pillow versions
 Image.MAX_IMAGE_PIXELS = None
 
 
 def load_image(path: Path) -> Image.Image:
     img = Image.open(path)
-    # Convert palette images early
     if img.mode == "P":
         img = img.convert("RGBA")
     return img
@@ -36,21 +25,17 @@ def load_image(path: Path) -> Image.Image:
 def ensure_mode_for_format(img: Image.Image, fmt: str) -> Image.Image:
     fmt = fmt.upper()
     if fmt in ("JPEG", "JPG"):
-        # JPEG doesn't support alpha; flatten if needed
         if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
             bg = Image.new("RGB", img.size, (255, 255, 255))
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
             bg.paste(img, mask=img.split()[-1])
             return bg
-        # Ensure RGB for JPEG
         if img.mode not in ("RGB",):
             return img.convert("RGB")
     elif fmt == "WEBP":
-        # WebP supports alpha; keep as is
         pass
     else:
-        # For other formats, be conservative
         if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
     return img
@@ -67,11 +52,10 @@ def bytes_of_save(img: Image.Image, fmt: str, quality: int = 85, **save_kwargs) 
         img.save(buf, format="JPEG", **kwargs)
     elif fmt_u == "WEBP":
         kwargs.setdefault("quality", quality)
-        kwargs.setdefault("method", 6)  # better compression
+        kwargs.setdefault("method", 6)  
         kwargs.setdefault("lossless", False)
         img.save(buf, format="WEBP", **kwargs)
     else:
-        # fallback: try saving with provided fmt and quality if supported
         if "quality" in Image.SAVE:
             kwargs.setdefault("quality", quality)
         img.save(buf, format=fmt_u, **kwargs)
@@ -79,10 +63,7 @@ def bytes_of_save(img: Image.Image, fmt: str, quality: int = 85, **save_kwargs) 
 
 
 def binary_search_quality(img: Image.Image, fmt: str, target_bytes: int, q_min=5, q_max=95, max_iters=8, **save_kwargs):
-    """
-    Binary search JPEG/WebP quality to get <= target_bytes.
-    Returns (best_bytes, best_quality) or (None, None) if failed even at q_min.
-    """
+
     best = None
     lo, hi = q_min, q_max
     for _ in range(max_iters):
@@ -91,11 +72,10 @@ def binary_search_quality(img: Image.Image, fmt: str, target_bytes: int, q_min=5
         size = len(data)
         if size <= target_bytes:
             best = (data, mid)
-            lo = mid + 1  # try higher quality but still under target
+            lo = mid + 1 
         else:
-            hi = mid - 1  # need lower quality
+            hi = mid - 1  
     if best is None:
-        # check the smallest bound explicitly
         data = bytes_of_save(img, fmt, quality=q_min, **save_kwargs)
         if len(data) <= target_bytes:
             return data, q_min
@@ -124,53 +104,39 @@ def compress_to_target(
     max_passes: int = 6,
     **save_kwargs,
 ) -> tuple[Path, int, tuple[int, int], int]:
-    """
-    Try to compress (and if needed downscale) to target_kb.
-    Returns: (output_path, size_kb, final_size (w,h), quality_used)
-    """
     img = load_image(input_path)
     fmt = fmt.upper()
     img = ensure_mode_for_format(img, fmt)
 
-    # Optional initial downscale by width
     if max_width is not None and img.width > max_width:
         factor = max_width / float(img.width)
         img = scale_by_factor(img, factor)
 
     target_bytes = target_kb * 1024
 
-    # First, try only quality search at current size
     data_quality, q_used = binary_search_quality(img, fmt, target_bytes, q_min=quality_min, q_max=quality_max, **save_kwargs)
     if data_quality is not None:
         output_path.write_bytes(data_quality)
         return output_path, len(data_quality) // 1024, img.size, q_used
 
-    # If still too big at lowest quality, progressively downscale and retry
-    # Heuristic: scale factor based on sqrt of target/current after test at q_min
-    # Start by checking size at q_min to estimate factor
     data_low = bytes_of_save(img, fmt, quality=quality_min, **save_kwargs)
     current_bytes = len(data_low)
 
     passes = 0
     cur_img = img
     while current_bytes > target_bytes and passes < max_passes:
-        # Calculate a scale factor with a safety margin
-        factor = math.sqrt(target_bytes / current_bytes) * 0.98  # slight under target to be safe
-        factor = min(factor, 0.95)  # avoid minuscule reductions
-        factor = max(factor, 0.5)   # avoid too aggressive single step
+        factor = math.sqrt(target_bytes / current_bytes) * 0.98  
+        factor = min(factor, 0.95)
+        factor = max(factor, 0.5)
         cur_img = scale_by_factor(cur_img, factor)
-        # Try quality search again at this new size
         data_quality, q_used = binary_search_quality(cur_img, fmt, target_bytes, q_min=quality_min, q_max=quality_max, **save_kwargs)
         if data_quality is not None:
             output_path.write_bytes(data_quality)
             return output_path, len(data_quality) // 1024, cur_img.size, q_used
-        # Update current_bytes at minimal quality for next pass
         data_low = bytes_of_save(cur_img, fmt, quality=quality_min, **save_kwargs)
         current_bytes = len(data_low)
         passes += 1
 
-    # If still not under target, write the best we got at minimal quality
-    # (This is a last resort to ensure an output is produced)
     output_path.write_bytes(data_low)
     return output_path, len(data_low) // 1024, cur_img.size, quality_min
 
@@ -188,7 +154,6 @@ def main():
 
     input_path: Path = args.input
     output_fmt = args.format.upper()
-    # Decide default output filename
     if args.out is None:
         stem = input_path.with_suffix("").name + "_compressed"
         ext = ".jpg" if output_fmt in ("JPEG", "JPG") else ".webp" if output_fmt == "WEBP" else f".{output_fmt.lower()}"
