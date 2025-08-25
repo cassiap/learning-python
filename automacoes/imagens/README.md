@@ -1,4 +1,4 @@
-\# 🖼️ shrink\_to\_size.py — Compactar imagem para um tamanho alvo (KB)
+\# 🖼️ ajustar_img.py — Compactar imagem para um tamanho alvo (KB)
 
 
 
