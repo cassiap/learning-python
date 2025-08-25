@@ -1,4 +1,4 @@
-\# 🖼️ ajustar_img.py — Compactar imagem para um tamanho alvo (KB)
+#ajustar_img.py — Compactar imagem para um tamanho alvo (KB)
 
 
 
@@ -12,7 +12,7 @@ A partir disso, desenvolvi um utilitário em Python que ajusta automaticamente a
 
 
 
-\## 🚀 Funcionalidade
+## 🚀 Funcionalidade
 
 \- Reduz imagens para um tamanho-alvo em KB (ex.: 70 KB).  
 
@@ -30,7 +30,7 @@ A partir disso, desenvolvi um utilitário em Python que ajusta automaticamente a
 
 
 
-\## 📦 Requisitos
+## 📦 Requisitos
 
 Instale as dependências com:
 
